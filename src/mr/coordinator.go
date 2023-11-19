@@ -28,8 +28,7 @@ type Coordinator struct {
 // Your code here -- RPC handlers for the worker to call.
 func (c *Coordinator) AllocateTask(args *WorkerArgs, reply *MasterReply) error {
 	c.mutex.Lock()
-	// 分配map任务
-	if c.FinishedMapAmount < c.NMap {
+	if c.FinishedMapAmount < c.NMap { // 分配map任务
 		// 寻找未完成的map任务
 		mapTaskNumber := -1
 		for i := 0; i < c.NMap; i++ {
@@ -49,7 +48,7 @@ func (c *Coordinator) AllocateTask(args *WorkerArgs, reply *MasterReply) error {
 			reply.NReduce = c.NReduce
 			c.MapTasksFlag[mapTaskNumber] = 1
 			c.mutex.Unlock()
-			go func() {
+			go func() { // 防止worker挂掉，10s后将任务标记为未完成
 				time.Sleep(time.Duration(10) * time.Second)
 				c.mutex.Lock()
 				if c.MapTasksFlag[mapTaskNumber] == 1 {
@@ -58,7 +57,8 @@ func (c *Coordinator) AllocateTask(args *WorkerArgs, reply *MasterReply) error {
 				c.mutex.Unlock()
 			}()
 		}
-	} else if c.FinishedReduceAmount < c.NReduce {
+	} else if c.FinishedReduceAmount < c.NReduce { // 分配reduce任务
+		// 寻找未完成的reduce任务
 		reduceTaskNumber := -1
 		for i := 0; i < c.NReduce; i++ {
 			if c.ReduceTasksFlag[i] == 0 {
@@ -66,6 +66,7 @@ func (c *Coordinator) AllocateTask(args *WorkerArgs, reply *MasterReply) error {
 				break
 			}
 		}
+		// 所有reduce任务都被分配
 		if reduceTaskNumber == -1 {
 			reply.TaskType = 2
 			c.mutex.Unlock()
@@ -75,7 +76,7 @@ func (c *Coordinator) AllocateTask(args *WorkerArgs, reply *MasterReply) error {
 			reply.ReduceTaskNumber = reduceTaskNumber
 			c.ReduceTasksFlag[reduceTaskNumber] = 1
 			c.mutex.Unlock()
-			go func() {
+			go func() { // 防止worker挂掉，10s后将任务标记为未完成
 				time.Sleep(time.Duration(10) * time.Second)
 				c.mutex.Lock()
 				if c.ReduceTasksFlag[reduceTaskNumber] == 1 {
