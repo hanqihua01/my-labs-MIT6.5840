@@ -14,7 +14,7 @@ Map接收key/value，通常key是文件名，value是文件内容，对value处�
 #### 容错
 worker容错：master周期性ping所有workers，如果无响应，对于已经完成map任务的，把该任务交给其他worker重做，对于正在执行的map或reduce任务，也重做。已经完成map任务需要重做是因为map得到的中间key/value存在本机上，无响应则无法获取，而已经完成的reduce任务无需重做是因为reduce得到的结果存在全局共享的文件系统内。
 
-master容错：master设置周期性的checkpoint，出错后更换master从checkpoint继续。但是master的出错是几乎不可能的。
+master容错：master设置周期性的checkpoint，出错后更换master从checkpoint继续。但是master仅有一个节点，出错的概率非常小，所以谷歌并没有实现master的容错。
 #### 局部性
 由于不同文件存储在不同机器上，可以指定存储待执行文件的机器去执行map操作，从而减少延迟。
 #### 任务粒度
