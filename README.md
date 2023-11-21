@@ -1,9 +1,9 @@
 # 1. MapReduce
-## Paper Notes
-### Programming Model
+## Paper notes
+### Programming model
 Map接收key/value，通常key是文件名，value是文件内容，对value处理后产生大量key/value，称为中间key/value；Reduce接收中间key/value，对相同key的所有value进行处理，产生结果key/value。
 ### Implementation
-![Alt text](img/image.png)
+![mapreduce](img/mapreduce.png)
 #### 执行过程
 1. 用户将输入数据划分为M片；
 2. Master分派M个任务给workers，一个worker上可能有多个任务；
@@ -85,3 +85,17 @@ chunk大小是64MB，因此chunkserver存储小文件时并不高效。
 当primary挂掉，coordinator需要等到lease到期才会指定新的primary，所以效率较低。
 #### 一致性过弱
 GFS采用的是弱一致性，也许太弱了~
+# 3 Raft
+## Paper notes
+### Replicated state machines
+![replicatedstatemachine](img/replicatedstatemachine.png)
+
+Replicated state machines are used to solve a variety of fault tolerance problems in distributed systems.
+
+Replicated state machines are typically implemented using a replicated log. Each log contains the same commands in the same order, so each state machine processes the same sequence of commands.
+
+Keeping the replicated log consistent is the job of the consensus algorithm.
+### Designing for understandability
+The first technique is the well-known approach of problem decomposition: where ever possible, we divided problems into separate pieces that could be solved, explained, and understood relatively independently. For example, in Raft we separated leader election, log replication, safety, and membership changes.
+
+Our second approach was to simplify the state space by reducing the number of states to consider, making the system more coherent and eliminating nondeterminism where possible.
