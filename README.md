@@ -99,3 +99,24 @@ Keeping the replicated log consistent is the job of the consensus algorithm.
 The first technique is the well-known approach of problem decomposition: where ever possible, we divided problems into separate pieces that could be solved, explained, and understood relatively independently. For example, in Raft we separated leader election, log replication, safety, and membership changes.
 
 Our second approach was to simplify the state space by reducing the number of states to consider, making the system more coherent and eliminating nondeterminism where possible.
+### The Raft consensus algorithm
+#### Leader election
+当服务器启动时，它是follower，如果在它的election timeout内没有收到来自leader的heartbeat消息，那么它就认为没有leader，发起新一轮选举；它把自己的term加1，转变为candidate，给自己投一票，向所有server发送RequestVote rpc请求，此时有以下三种情况：
+
+第一种，大多数server投赞成票，它成为leader，它向所有server发送heartbeat消息来树立权威并且阻止新的选举；
+
+第二种，等待投票过程中，它收到了来自leader的AppendEntries rpc消息，如果leader的term至少和它一样大，它就放弃选举回到follower，否则，它就拒绝来自leader的rpc消息，继续当candidate；
+
+第三种，除了它以外还有别的candidate在参加选举，最后大家的票数都一样，这种情况下，所有candidate都time out，并且都再发起新一轮选举，把自己term加1，给自己投一票，向其他server发送RequestVote rpc消息。但是这样会无穷尽的循环下去，怎么解决呢？Raft这样解决：给每一个candidate随机的选举timeout，这样在大多数情况下只有一个server会time out，它在其他server time out之前就赢得了选举；同样的机制也用在票数相等情况上，如果票数相等了，每个candidate等待一个随机的timeout之后再发起新的选举。
+#### Log replication
+client向leader发起request，leader把它作为新的entry添加到自己的log里，然后向所有server发送AppendEntries rpc消息，如果某个follower崩了、运行缓慢或者网络有问题，leader就不停地发rpc消息直到所有follower存储了这个log entry。
+
+每个log entry存储了生成entry时的term号以及包含的命令，此外也有在log里的index。如果这个log entry在大多数机器上成功复制，那么leader就commit这个entry，所谓的commit，就是把entry包含的命令应用于状态机。如果一个follower得知这个entry被leader commit了，它也把这个entry commit。如果一个entry被commit了，Raft会保证它永远不会被撤销，并且最终会在所有能运行的server里都commit。
+
+但是，follower可能会缺失一些entry，也可能会多出一些leader没有的entry，或者两种都存在，如下图所示：
+
+![entryinconsistency](img/entryinconsistency.png)
+
+f在term 2当leader的时候挂了，term 2的entry没有复制出去，很快它又好了，继续当term 3的leader，然后又挂了，再也没好过；然后e当了term 4的leader，在index 5时，b挂了，term 4的第二个entry被成功复制到了大多数server，所以被commit了，然后到了index 6，e的网络出了问题，别的server没收到它的消息，所以选出了新的leader，谁是term 5的leader貌似看不出来；但是能看出term 6的leader是c，到了index 10，a挂了，所以term 6的第三个entry并没有被commit；到了index 11，显然c的网络也出了问题，d成为了新的leader。
+
+所以Raft如何处理这种entry不一致的问题呢？leader对每一个follower都维护一个nextIndex，指的是leader发送给该follower的下一个log entry的index。当leader刚成为leader时，它对所有follower的nextIndex值都是它自己最新log entry的index+1。当它发送AppendEntries rpc时，如果follower的log和leader的不一致，rpc会被拒绝，leader就把对应的nextIndex-1，重新发送rpc，直到rpc被接受，此时follower该entry之后的所有entry都被删除，然后添加上与leader一致的entry。然后leader和follower的log就相一致了。
