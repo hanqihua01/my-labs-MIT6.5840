@@ -120,3 +120,12 @@ client向leader发起request，leader把它作为新的entry添加到自己的lo
 f在term 2当leader的时候挂了，term 2的entry没有复制出去，很快它又好了，继续当term 3的leader，然后又挂了，再也没好过；然后e当了term 4的leader，在index 5时，b挂了，term 4的第二个entry被成功复制到了大多数server，所以被commit了，然后到了index 6，e的网络出了问题，别的server没收到它的消息，所以选出了新的leader，谁是term 5的leader貌似看不出来；但是能看出term 6的leader是c，到了index 10，a挂了，所以term 6的第三个entry并没有被commit；到了index 11，显然c的网络也出了问题，d成为了新的leader。
 
 所以Raft如何处理这种entry不一致的问题呢？leader对每一个follower都维护一个nextIndex，指的是leader发送给该follower的下一个log entry的index。当leader刚成为leader时，它对所有follower的nextIndex值都是它自己最新log entry的index+1。当它发送AppendEntries rpc时，如果follower的log和leader的不一致，rpc会被拒绝，leader就把对应的nextIndex-1，重新发送rpc，直到rpc被接受，此时follower该entry之后的所有entry都被删除，然后添加上与leader一致的entry。然后leader和follower的log就相一致了。
+#### Safety
+1. 选举限制：Raft可以通过一些限制保证选出来的leader一定具有所有被commit的entry。entry被commit的前提是什么呢？是它被复制到大多数的server上了。所以，candidate想要得到选票，它的log必须至少和大多数server的log一样的“新”。candidate发送RequestVote rpc时，包含candidate的log信息，收到rpc的server比较一下log的term和index，如果term更新，则投它，如果term一样，但是index更新，则也投它。
+2. Committing entries from previous terms: Raft never commits log entries from previous terms by counting replicas. Only log entries from the leader's current term are commited by counting replicas. Log entries retain their original term numbers when a leader replicates entries from previous terms.
+#### Follower and candidate crashes
+如果follower或candidate崩了，那么任何发往它的RequestVote和AppendEntries都会失败，并且会无限制地再次发送。如果一个sever收到rpc后做出动作，但是在准备回复之前崩了，也没关系，因为Raft的rpc都是幂等的，下次收到相同的rpc后不做动作就行了。
+#### Timing and availability
+Raft算法一个重要的要求安全不能依赖于time，然而，系统的availability不可避免地依赖于timing。
+
+broadcastTime << electionTimeout << MTBF
