@@ -223,7 +223,6 @@ func (rf *Raft) HeartbeatTimeout() bool {
 func (rf *Raft) StartAppendEntries(ifHeartbeat bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	rf.SetElectionTimeout()
 	args := &AppendEntriesArgs{}
 	args.Term = rf.currentTerm
 	args.LeaderId = rf.me
