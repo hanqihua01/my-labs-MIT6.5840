@@ -31,7 +31,7 @@ import (
 
 /**************************************** 定义常量 ****************************************/
 const FOLLOWER, CANDIDATE, LEADER = 0, 1, 2 // 避免魔法数字
-const BASE_ELECTION_TIMEOUT = 300           // 选举超时时间基数
+const BASE_ELECTION_TIMEOUT = 1000          // 选举超时时间基数
 const BASE_HEARTBEAT_TIMEOUT = 100          // 心跳超时时间基数
 
 /**************************************** 定义结构体 ****************************************/
@@ -105,7 +105,6 @@ type Raft struct {
 }
 
 /**************************************** 定义函数 ****************************************/
-/********** 选举阶段函数 **********/
 func (rf *Raft) SetElectionTimeout() {
 	rf.electionTimeout = time.Duration(BASE_ELECTION_TIMEOUT+rand.Int63()%BASE_ELECTION_TIMEOUT) * time.Millisecond
 	rf.lastELectionTime = time.Now()
@@ -210,9 +209,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 func (rf *Raft) SetHeartbeatTimeout() {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	rf.heartbeatTimeout = BASE_HEARTBEAT_TIMEOUT * time.Millisecond
 	rf.lastHeartbeat = time.Now()
-	rf.mu.Unlock()
 }
 
 func (rf *Raft) HeartbeatTimeout() bool {
@@ -271,9 +270,9 @@ func (rf *Raft) GetState() (int, bool) {
 	var isleader bool
 	// Your code here (2A).
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	term = rf.currentTerm
 	isleader = rf.state == LEADER
-	rf.mu.Unlock()
 	return term, isleader
 }
 
@@ -397,7 +396,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 }
 
 func (rf *Raft) ticker() {
-	for rf.killed() == false {
+	for !rf.killed() {
 
 		// Your code here (2A)
 		// Check if a leader election should be started.
