@@ -61,6 +61,17 @@ type AppendEntriesReply struct {
 	Success bool // 跟随者包含了匹配上prevLogIndex和prevLogTerm的日志时为真
 }
 
+type Entry struct {
+	Term    int         // 日志条目包含的任期号
+	Command interface{} // 状态机的命令
+}
+
+type Log struct {
+	Entries       []Entry
+	FirstLogIndex int
+	LastLogIndex  int
+}
+
 // as each Raft peer becomes aware that successive log entries are
 // committed, the peer should send an ApplyMsg to the service (or
 // tester) on the same server, via the applyCh passed to Make(). set
@@ -100,8 +111,9 @@ type Raft struct {
 	lastHeartbeat    time.Time     // 上次心跳时间
 
 	// Persistent state on all servers
-	currentTerm int // 当前的任期号
-	votedFor    int // 当前任期内收到选票的候选人ID
+	currentTerm int  // 当前的任期号
+	votedFor    int  // 当前任期内收到选票的候选人ID
+	log         *Log // 日志条目集；每一个条目包含一个用户状态机执行的指令，和收到时的任期号
 }
 
 /**************************************** 定义函数 ****************************************/
@@ -218,6 +230,15 @@ func (rf *Raft) HeartbeatTimeout() bool {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	return time.Since(rf.lastHeartbeat) > rf.heartbeatTimeout
+}
+
+func (log *Log) getRealIndex(index int) int {
+	return index - log.FirstLogIndex
+}
+
+func (log *Log) appendL(newEntries ...Entry) {
+	log.Entries = append(log.Entries[:log.getRealIndex(log.LastLogIndex)+1], newEntries...)
+	log.LastLogIndex += len(newEntries)
 }
 
 func (rf *Raft) StartAppendEntries(ifHeartbeat bool) {
@@ -340,7 +361,16 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	term = rf.currentTerm
+	if rf.state != LEADER {
+		isLeader = false
+		return index, term, isLeader
+	}
+	index = rf.log.LastLogIndex + 1
+	rf.log.appendL(Entry{term, command})
+	go rf.StartAppendEntries(false) // 发送心跳
 	return index, term, isLeader
 }
 
