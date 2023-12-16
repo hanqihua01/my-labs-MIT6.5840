@@ -28,6 +28,7 @@ import (
 	"6.5840/labrpc"
 )
 
+
 // as each Raft peer becomes aware that successive log entries are
 // committed, the peer should send an ApplyMsg to the service (or
 // tester) on the same server, via the applyCh passed to Make(). set
@@ -49,15 +50,6 @@ type ApplyMsg struct {
 	SnapshotIndex int
 }
 
-// 枚举节点的三种状态
-const (
-	FOLLOWER = iota
-	CANDIDATE
-	LEADER
-)
-
-const BASICELECTIONTIMEOUTDURATION = time.Millisecond * 300 // 基础的选举超时时间
-
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
@@ -69,12 +61,7 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-	State                   int           // 节点的状态
-	ElectionTimeoutDuration time.Duration // 选举超时时间
-	LastAppendEntriesTime   time.Time     // 上一次收到心跳的时间，用于判断是否超时
 
-	CurrentTerm int // 节点当前的任期
-	VotedFor    int // 节点在当前任期内投票给谁了
 }
 
 // return currentTerm and whether this server
@@ -105,6 +92,7 @@ func (rf *Raft) persist() {
 	// rf.persister.Save(raftstate, nil)
 }
 
+
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
@@ -125,6 +113,7 @@ func (rf *Raft) readPersist(data []byte) {
 	// }
 }
 
+
 // the service says it has created a snapshot that has
 // all info up to and including index. this means the
 // service no longer needs the log through (and including)
@@ -133,6 +122,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
 
 }
+
 
 // example RequestVote RPC arguments structure.
 // field names must start with capital letters!
@@ -183,6 +173,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
+
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
@@ -201,6 +192,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
+
 
 	return index, term, isLeader
 }
@@ -229,16 +221,7 @@ func (rf *Raft) ticker() {
 
 		// Your code here (2A)
 		// Check if a leader election should be started.
-		switch rf.State {
-		case FOLLOWER:
-			// 如果在超时时间内没有收到AE，则发起新一轮选举
-			if rf.ElectionTimeout() {
-				rf.StartElection()
-			}
-		case CANDIDATE:
-		case LEADER:
 
-		}
 
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
@@ -264,12 +247,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
-	rf.State = FOLLOWER                   // 节点启动时，状态是FOLLOWER
-	rf.SetElectionTimeoutDuration()       // 设置选举超时时间
-	rf.LastAppendEntriesTime = time.Now() // 设置上一次收到AE的时间为当前时间
-
-	rf.CurrentTerm = 0 // 节点启动时，当前任期为0
-	rf.VotedFor = -1   // 节点启动时，没有投票给任何人
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
@@ -277,30 +254,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
+
 	return rf
-}
-
-// 设置选举超时时间，使用基础选举超时时间加上一个随机值
-func (rf *Raft) SetElectionTimeoutDuration() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	rf.ElectionTimeoutDuration = BASICELECTIONTIMEOUTDURATION + time.Duration(rand.Int63()%300)*time.Millisecond
-}
-
-// 判断是否选举超时
-func (rf *Raft) ElectionTimeout() bool {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	return time.Since(rf.LastAppendEntriesTime) > rf.ElectionTimeoutDuration
-}
-
-func (rf *Raft) StartElection() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	rf.CurrentTerm += 1
-	rf.VotedFor = rf.me
-
-	rf.State = CANDIDATE
-	rf.SetElectionTimeoutDuration()
-	rf.LastAppendEntriesTime = time.Now()
 }
